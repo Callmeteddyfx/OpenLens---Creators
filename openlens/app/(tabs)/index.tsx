@@ -5,6 +5,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Animated,
+  Easing,
   Alert,
   Image,
 } from 'react-native';
@@ -20,6 +22,10 @@ export default function HomeScreen() {
   const handleImagePress = async () => {
     try {
       const clipboardText = await Clipboard.getStringAsync();
+
+      const scaleAnim = new Animated.Value(1);
+      const rotateAnim = new Animated.Value(0);
+
       
       if (!clipboardText || clipboardText.trim() === '') {
         Alert.alert('Clipboard is empty');
