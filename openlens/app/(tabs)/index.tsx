@@ -9,7 +9,10 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function HomeScreen() {
   const textInputRef = useRef<TextInput>(null);
@@ -34,9 +37,9 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.content}>
-        <Text style={styles.header}>OpenLens</Text>
+      <Text style={styles.header}>OpenLens</Text>
 
+      <View style={styles.bottomContent}>
         <View style={styles.card}>
           <TextInput
             ref={textInputRef}
@@ -45,7 +48,7 @@ export default function HomeScreen() {
           />
           <TouchableOpacity onPress={handleImagePress} activeOpacity={0.8}>
             <Image
-              source={require('@/assets/images/icon3.jpg')}
+              source={require('@/assets/images/icon3-removebg.png')}
               style={styles.imagePlaceholder}
               resizeMode="contain"
             />
@@ -55,6 +58,14 @@ export default function HomeScreen() {
         <Text style={styles.helperText}>
           Download any video using the video's link.
         </Text>
+
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => router.push('/(tabs)/explore')}
+          activeOpacity={0.7}
+        >
+          <IconSymbol name="gearshape.fill" size={28} color="#6B7280" />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -65,21 +76,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 40,
-  },
   header: {
     fontSize: 36,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  bottomContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#transparent',
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
@@ -109,5 +125,9 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 20,
+  },
+  settingsButton: {
+    marginTop: 24,
+    padding: 8,
   },
 });
