@@ -1,12 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Animated,
-  Easing,
   Alert,
   Image,
 } from 'react-native';
@@ -14,32 +12,77 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  Easing as ReanimatedEasing,
+  interpolate,
+  runOnJS,
+} from 'react-native-reanimated';
+
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function HomeScreen() {
   const textInputRef = useRef<TextInput>(null);
 
-  const handleImagePress = async () => {
+  // shared values for reanimated
+  const scale = useSharedValue(1);
+  const rotate = useSharedValue(0); // normalized 0..1
+  const glow = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const spin = `${interpolate(rotate.value, [0, 1], [0, 1080])}deg`;
+    const glowRadius = interpolate(glow.value, [0, 1], [0, 20]);
+    const glowOpacity = interpolate(glow.value, [0, 1], [0, 0.8]);
+
+    return {
+      transform: [{ scale: scale.value }, { rotate: spin }],
+      shadowColor: '#4F46E5',
+      shadowRadius: glowRadius,
+      shadowOpacity: glowOpacity,
+      elevation: glowRadius,
+    };
+  });
+
+  const handleImagePress = useCallback(async () => {
     try {
       const clipboardText = await Clipboard.getStringAsync();
 
-      const scaleAnim = new Animated.Value(1);
-      const rotateAnim = new Animated.Value(0);
-
-      
       if (!clipboardText || clipboardText.trim() === '') {
         Alert.alert('Clipboard is empty');
         return;
       }
 
-      // Paste clipboard content to the invisible textview
+      // paste content first; not animated
       if (textInputRef.current) {
         textInputRef.current.setNativeProps({ text: clipboardText });
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to read clipboard');
+
+      // start animation sequence on UI thread
+      // pop scale up immediately
+      scale.value = withSpring(1.1);
+
+      // perform rotation and glow concurrently
+      rotate.value = withTiming(1, {
+        duration: 3000,
+        easing: ReanimatedEasing.linear,
+      }, (isFinished) => {
+        if (isFinished) {
+          // reset values after spin
+          scale.value = withSpring(1);
+          glow.value = withTiming(0, { duration: 500 });
+          // clear rotate without animation so next press starts fresh
+          rotate.value = 0;
+        }
+      });
+      glow.value = withTiming(1, { duration: 3000 });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'goon';
+      Alert.alert('Error', message);
     }
-  };
+  }, [scale, rotate, glow]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -53,13 +96,15 @@ export default function HomeScreen() {
             editable={false}
           />
           <TouchableOpacity onPress={handleImagePress} activeOpacity={0.8}>
+              <Animated.View style={animatedStyle}>
             <Image
               source={require('@/assets/images/icon3-removebg.png')}
               style={styles.imagePlaceholder}
               resizeMode="contain"
             />
+          </Animated.View>
           </TouchableOpacity>
-        </View>
+          </View>
 
         <Text style={styles.helperText}>
           Download any video using the video's link.
@@ -83,6 +128,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
+    width: '100%',
     fontSize: 36,
     fontWeight: '600',
     color: '#111827',
@@ -91,7 +137,7 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
   bottomContent: {
     flex: 1,
