@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+
 
 import Animated, {
   useSharedValue,
@@ -24,8 +27,56 @@ import Animated, {
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
+// ----------------------------------------------------------------
+// API helpers / types
+// ----------------------------------------------------------------
+const BASE_URL = 'http://70.66.225.161:8000'; // placeholder local IP
+
+interface DownloadResponse {
+  task_id: string;
+}
+
+interface StatusResponse {
+  status?: string;
+  url?: string;
+}
+
+async function postDownload(url: string): Promise<DownloadResponse> {
+  try {
+    const resp = await fetch(`${BASE_URL}/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!resp.ok) {
+      throw new Error(`server returned ${resp.status}`);
+    }
+    return resp.json();
+  } catch (err: unknown) {
+    console.error('postDownload error', err);
+    throw err;
+  }
+}
+
+async function getStatus(taskId: string): Promise<StatusResponse> {
+  try {
+    const resp = await fetch(`${BASE_URL}/status/${taskId}`);
+    if (!resp.ok) {
+      throw new Error(`server returned ${resp.status}`);
+    }
+    return resp.json();
+  } catch (err: unknown) {
+    console.error('getStatus error', err);
+    throw err;
+  }
+}
+
+
 export default function HomeScreen() {
   const textInputRef = useRef<TextInput>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   // shared values for reanimated
   const scale = useSharedValue(1);
@@ -46,6 +97,67 @@ export default function HomeScreen() {
     };
   });
 
+    // ----------------------------------------------------------------
+  // download / polling logic
+  // ----------------------------------------------------------------
+  const downloadAndSave = useCallback(async (downloadUrl: string) => {
+    try {
+      const { status: perm } = await MediaLibrary.requestPermissionsAsync();
+      if (perm !== 'granted') {
+        Alert.alert('Permission denied', 'Cannot save video without permission');
+        return;
+      }
+
+      const localUri = FileSystem.documentDirectory + 'video.mp4';
+      const { uri } = await FileSystem.downloadAsync(downloadUrl, localUri);
+      await MediaLibrary.createAssetAsync(uri);
+      Alert.alert('Success', 'Video saved to gallery');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      Alert.alert('Error', msg);
+    }
+  }, []);
+
+  const pollStatus = useCallback(
+    async (taskId: string) => {
+      try {
+        const data = await getStatus(taskId);
+        setStatus(data.status ?? null);
+        if (data.status === 'ready' && data.url) {
+          await downloadAndSave(data.url);
+          setLoading(false);
+          setStatus('done');
+        } else if (data.status === 'processing') {
+          setTimeout(() => pollStatus(taskId), 2000);
+        } else {
+          // unexpected state
+          setLoading(false);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Polling failed';
+        Alert.alert('Error', msg);
+        setLoading(false);
+      }
+    },
+    [downloadAndSave],
+  );
+
+  const startDownload = useCallback(
+    async (videoUrl: string) => {
+      setLoading(true);
+      setStatus('processing');
+      try {
+        const { task_id } = await postDownload(videoUrl);
+        pollStatus(task_id);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        Alert.alert('Download error', msg);
+        setLoading(false);
+      }
+    },
+    [pollStatus],
+  );
+
   const handleImagePress = useCallback(async () => {
     try {
       const clipboardText = await Clipboard.getStringAsync();
@@ -59,6 +171,9 @@ export default function HomeScreen() {
       if (textInputRef.current) {
         textInputRef.current.setNativeProps({ text: clipboardText });
       }
+
+      // fire off download request
+      startDownload(clipboardText);
 
       // start animation sequence on UI thread
       // pop scale up immediately
@@ -79,7 +194,7 @@ export default function HomeScreen() {
       });
       glow.value = withTiming(1, { duration: 3000 });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'goon';
+      const message = error instanceof Error ? error.message : 'Error copying to clipboard';
       Alert.alert('Error', message);
     }
   }, [scale, rotate, glow]);
@@ -163,7 +278,7 @@ const styles = StyleSheet.create({
   invisibleInput: {
     display: 'flex',
     position: 'absolute',
-    opacity: 0,
+    opacity: 100,
     height: 0,
     width: 0,
   },
