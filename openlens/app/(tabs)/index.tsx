@@ -11,8 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system';
+import FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
+// NOTE: expo-file-system exports a default module containing
+// `documentDirectory`/`cacheDirectory` etc.; avoid namespace import so
+// the type includes those properties.
 
 
 import Animated, {
@@ -108,7 +111,11 @@ export default function HomeScreen() {
         return;
       }
 
-      const localUri = FileSystem.documentDirectory + 'video.mp4';
+      const dir = (FileSystem as any).documentDirectory;
+      if (!dir) {
+        throw new Error('documentDirectory is unavailable');
+      }
+      const localUri = dir + 'video.mp4';
       const { uri } = await FileSystem.downloadAsync(downloadUrl, localUri);
       await MediaLibrary.createAssetAsync(uri);
       Alert.alert('Success', 'Video saved to gallery');
