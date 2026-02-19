@@ -30,7 +30,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 // ----------------------------------------------------------------
 // API helpers / types
 // ----------------------------------------------------------------
-const BASE_URL = 'http://70.66.225.161:8000'; // placeholder local IP
+const BASE_URL = 'http://10.0.0.227:8000'; // placeholder local IP
 
 interface DownloadResponse {
   task_id: string;
