@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  Platform,
+  ToastAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
+import * as WebBrowser from 'expo-web-browser';
 // NOTE: expo-file-system exports a default module containing
 // `documentDirectory`/`cacheDirectory` etc.; avoid namespace import so
 // the type includes those properties.
@@ -80,6 +83,17 @@ export default function HomeScreen() {
 
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [expoFsUnavailable, setExpoFsUnavailable] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(msg, ToastAndroid.SHORT);
+    } else {
+      setSuccessMessage(msg);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+  }, []);
 
   // shared values for reanimated
   const scale = useSharedValue(1);
@@ -100,25 +114,56 @@ export default function HomeScreen() {
     };
   });
 
+  useEffect(() => {
+    const doc = (FileSystem as any).documentDirectory;
+    const cache = (FileSystem as any).cacheDirectory;
+    setExpoFsUnavailable(!doc && !cache);
+  }, []);
+
     // ----------------------------------------------------------------
   // download / polling logic
   // ----------------------------------------------------------------
   const downloadAndSave = useCallback(async (downloadUrl: string) => {
     try {
-      const { status: perm } = await MediaLibrary.requestPermissionsAsync();
-      if (perm !== 'granted') {
+      console.log('file-system dirs', { documentDirectory: (FileSystem as any).documentDirectory, cacheDirectory: (FileSystem as any).cacheDirectory });
+      const permResp = await MediaLibrary.requestPermissionsAsync();
+      console.log('MediaLibrary.requestPermissionsAsync ->', permResp);
+      if (permResp.status !== 'granted') {
         Alert.alert('Permission denied', 'Cannot save video without permission');
         return;
       }
 
-      const dir = (FileSystem as any).documentDirectory;
-      if (!dir) {
-        throw new Error('documentDirectory is unavailable');
+      const baseDir = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory ?? '';
+      if (!baseDir) {
+        // Expo Go or environment without writable dirs: offer a safe fallback
+        Alert.alert(
+          'Unable to save on device',
+          'This environment cannot write files directly. Open the URL in your browser to download manually, or copy the link.',
+          [
+            {
+              text: 'Open in Browser',
+              onPress: async () => {
+                await WebBrowser.openBrowserAsync(downloadUrl);
+              },
+            },
+            {
+              text: 'Copy Link',
+              onPress: async () => {
+                await Clipboard.setStringAsync(downloadUrl);
+                Alert.alert('Copied', 'Download link copied to clipboard');
+              },
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        );
+        return;
       }
-      const localUri = dir + 'video.mp4';
+      const localUri = baseDir + 'video.mp4';
+      console.log('downloading to', localUri);
       const { uri } = await FileSystem.downloadAsync(downloadUrl, localUri);
+      console.log('download complete, uri=', uri);
       await MediaLibrary.createAssetAsync(uri);
-      Alert.alert('Success', 'Video saved to gallery');
+      showToast('Saved to gallery');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Save failed';
       Alert.alert('Error', msg);
@@ -211,6 +256,11 @@ export default function HomeScreen() {
       <Text style={styles.header}>OpenLens</Text>
 
       <View style={styles.bottomContent}>
+        {expoFsUnavailable ? (
+          <View style={styles.hintBanner}>
+            <Text style={styles.hintText}>Expo Go cannot save files directly — use a dev client to enable saving to Photos.</Text>
+          </View>
+        ) : null}
         <View style={styles.card}>
           <TextInput
             ref={textInputRef}
@@ -231,6 +281,12 @@ export default function HomeScreen() {
         <Text style={styles.helperText}>
           Download any video using the video's link.
         </Text>
+
+        {successMessage ? (
+          <View style={styles.successPopup}>
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={styles.settingsButton}
@@ -303,5 +359,31 @@ const styles = StyleSheet.create({
   settingsButton: {
     marginTop: 24,
     padding: 8,
+  },
+  hintBanner: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  hintText: {
+    color: '#92400E',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  successPopup: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(16,185,129,0.95)',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  successText: {
+    color: '#fff',
+    fontSize: 14,
   },
 });
