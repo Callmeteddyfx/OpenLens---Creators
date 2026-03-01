@@ -16,6 +16,8 @@ import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as WebBrowser from 'expo-web-browser';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 // NOTE: expo-file-system exports a default module containing
 // `documentDirectory`/`cacheDirectory` etc.; avoid namespace import so
 // the type includes those properties.
@@ -32,6 +34,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { red } from 'react-native-reanimated/lib/typescript/Colors';
 
 // ----------------------------------------------------------------
 // API helpers / types
@@ -253,7 +256,24 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Text style={styles.header}>OpenLens</Text>
+      <View style={styles.header}>
+        {MaskedView ? (
+          <MaskedView style={styles.maskedView} maskElement={
+            <View style={styles.maskContainer} pointerEvents="none">
+              <Text style={styles.headerText}>OpenLens</Text>
+            </View>
+          }>
+            <LinearGradient
+              colors={["#007BFF", "#E0F0FF", "#2D9CFF"]}
+              start={[0, 0]}
+              end={[1, 0]}
+              style={styles.headerGradient}
+            />
+          </MaskedView>
+        ) : (
+          <Text style={[styles.headerText, { color: '#2D9CFF' }]}>OpenLens</Text>
+        )}
+      </View>
 
       <View style={styles.bottomContent}>
         {expoFsUnavailable ? (
@@ -307,15 +327,35 @@ const styles = StyleSheet.create({
   },
   header: {
     width: '100%',
-    fontSize: 36,
-    fontWeight: '600',
-    color: '#111827',
     paddingHorizontal: 20,
     paddingTop: 40,
+    paddingBottom: 20,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerGradient: {
+    width: '100%',
+    height: 56,
+    alignSelf: 'stretch',
+  },
+  headerText: {
+    fontSize: 40,
+    fontWeight: '600',
+    color: '#000',
+    textAlign: 'center',
+  },
+  maskedView: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  maskContainer: {
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
   },
   bottomContent: {
     flex: 1,
